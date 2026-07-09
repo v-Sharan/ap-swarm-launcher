@@ -175,7 +175,7 @@ async def run(
     gcs_port = DEFAULT_GCS_PORT
     listener_port = DEFAULT_LISTENER_PORT
 
-    gcs_address = f"127.0.0.1:{gcs_port}" if use_udp else None
+    gcs_address = f"192.168.31.15:{gcs_port}" if use_udp else None
     multicast_address = f"239.255.67.77:{listener_port}" if use_multicast else None
 
     sitl_executable = Path.cwd() / sitl_executable
@@ -186,8 +186,8 @@ async def run(
     grid = create_grid_formation(num_drones_per_row, spacing, pos_noise)
 
     param_sources: List[Union[Path, str, Tuple[str, float]]] = [
-        "embedded://copter-default.parm",
-        "embedded://copter-skybrush.parm",
+        "embedded://plane.parm",
+        "embedded://quadplane.parm",
     ]
     param_sources.extend(param)
 
@@ -206,6 +206,7 @@ async def run(
     ).use() as swarm:
         for i in range(num_drones):
             await swarm.add_drone(
+                swarm_output="192.168.31.15:1455{}".format(i + 1),
                 home=grid(i),
                 heading=(home.orientation + normalvariate(0, yaw_noise)) % 360,
             )

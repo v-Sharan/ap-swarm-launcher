@@ -152,6 +152,7 @@ def create_args_for_simulator(
     # as of ArduCopter 4.2.1 that crashes the SITL on macOS if the speedup is
     # not set explicitly
     result.extend(["--speedup", str(speedup)])
+    print(f"Starting SITL with args: {result}")
 
     return result
 
@@ -218,7 +219,7 @@ async def start_simulator(
 
         args = [fixup_arg(arg) for arg in args]
         args.append("--disable-fgview")
-
+        
     if cwd is not None:
         cwd = str(cwd)
 
@@ -395,6 +396,7 @@ class SimulatedDroneSwarm:
         self,
         home: Point,
         heading: Optional[float] = None,
+        swarm_output: str = ""
     ) -> ManagedAsyncProcess:
         """Starts the simulator process for a single drone with the given
         parameters.
@@ -458,6 +460,10 @@ class SimulatedDroneSwarm:
             if primary_udp_output:
                 # We need the first serial port for primary telemetry
                 await fp.write("SERIAL1_PROTOCOL\t2\n".encode("utf-8"))
+                
+            if swarm_output:
+                # We need the first serial port for primary telemetry
+                await fp.write("SERIAL4_PROTOCOL\t2\n".encode("utf-8"))
 
             if self._multicast_address:
                 # We need a second serial port for receiving multicast traffic
@@ -505,7 +511,9 @@ class SimulatedDroneSwarm:
                 # skip it.
                 # Serial ports 4 and 5 could be used for additional TCP ports;
                 # feel free to uncomment the lines below.
-                # 4: (f"tcp:{tcp_port + 10000}" if tcp_port else "none"),
+                4: (
+                    f"udpclient:{swarm_output}" if swarm_output else "none"
+                ),
                 # 5: (f"tcp:{tcp_port + 20000}" if tcp_port else "none"),
             },
         )
@@ -534,6 +542,7 @@ class SimulatedDroneSwarmContext:
         self,
         home: Point,
         heading: Optional[float] = None,
+        swarm_output: str = ""
     ) -> ManagedAsyncProcess:
         """Adds a new drone to the swarm and starts the corresponding simulator
         process.
@@ -543,7 +552,7 @@ class SimulatedDroneSwarmContext:
             heading: the initial heading of the drone; `None` means to use the
                 swarm-specific default
         """
-        return await self._swarm._start_simulated_drone(home=home, heading=heading)
+        return await self._swarm._start_simulated_drone(home=home, heading=heading,swarm_output=swarm_output)
 
     def request_stop(self):
         """Requests the drone swarm to stop the simulation and shut down
