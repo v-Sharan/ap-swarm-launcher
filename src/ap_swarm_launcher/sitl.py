@@ -219,7 +219,7 @@ async def start_simulator(
 
         args = [fixup_arg(arg) for arg in args]
         args.append("--disable-fgview")
-        
+
     if cwd is not None:
         cwd = str(cwd)
 
@@ -380,9 +380,7 @@ class SimulatedDroneSwarm:
         return (
             self._gcs_address
             if self._gcs_address
-            else f"127.0.0.1:{DEFAULT_GCS_PORT}"
-            if self._serial_port
-            else None
+            else f"127.0.0.1:{DEFAULT_GCS_PORT}" if self._serial_port else None
         )
 
     def _request_stop(self):
@@ -396,7 +394,8 @@ class SimulatedDroneSwarm:
         self,
         home: Point,
         heading: Optional[float] = None,
-        swarm_output: str = ""
+        swarm_output: str = "",
+        gcs_out: str = "",
     ) -> ManagedAsyncProcess:
         """Starts the simulator process for a single drone with the given
         parameters.
@@ -460,7 +459,7 @@ class SimulatedDroneSwarm:
             if primary_udp_output:
                 # We need the first serial port for primary telemetry
                 await fp.write("SERIAL1_PROTOCOL\t2\n".encode("utf-8"))
-                
+
             if swarm_output:
                 # We need the first serial port for primary telemetry
                 await fp.write("SERIAL4_PROTOCOL\t2\n".encode("utf-8"))
@@ -470,7 +469,7 @@ class SimulatedDroneSwarm:
                 # (which is used to simulate broadcast). At the same time, we
                 # disable MAVLink forwarding to/from this port
                 await fp.write("SERIAL2_PROTOCOL\t2\n".encode("utf-8"))
-                await fp.write("SERIAL2_OPTIONS\t1024\n".encode("utf-8"))
+                # await fp.write("SERIAL2_OPTIONS\t1024\n".encode("utf-8"))
 
             if tcp_port:
                 # We also need a serial port for receiving direct traffic from
@@ -503,17 +502,18 @@ class SimulatedDroneSwarm:
                 # used to simulate broadcasts). This corresponds to SERIAL2 in
                 # the params.
                 2: (
-                    f"mcast:{self._multicast_address}"
-                    if self._multicast_address
-                    else "none"
+                    f"udpclient:{gcs_out}"
+                    if gcs_out
+                    else None
+                    # f"mcast:{self._multicast_address}"
+                    # if self._multicast_address
+                    # else "none"
                 ),
                 # Serial port 3 is used for the GPS in the simulator so we
                 # skip it.
                 # Serial ports 4 and 5 could be used for additional TCP ports;
                 # feel free to uncomment the lines below.
-                4: (
-                    f"udpclient:{swarm_output}" if swarm_output else "none"
-                ),
+                4: (f"udpclient:{swarm_output}" if swarm_output else "none"),
                 # 5: (f"tcp:{tcp_port + 20000}" if tcp_port else "none"),
             },
         )
@@ -542,7 +542,8 @@ class SimulatedDroneSwarmContext:
         self,
         home: Point,
         heading: Optional[float] = None,
-        swarm_output: str = ""
+        swarm_output: str = "",
+        gcs_out: str = "",
     ) -> ManagedAsyncProcess:
         """Adds a new drone to the swarm and starts the corresponding simulator
         process.
@@ -552,7 +553,9 @@ class SimulatedDroneSwarmContext:
             heading: the initial heading of the drone; `None` means to use the
                 swarm-specific default
         """
-        return await self._swarm._start_simulated_drone(home=home, heading=heading,swarm_output=swarm_output)
+        return await self._swarm._start_simulated_drone(
+            home=home, heading=heading, swarm_output=swarm_output, gcs_out=gcs_out
+        )
 
     def request_stop(self):
         """Requests the drone swarm to stop the simulation and shut down

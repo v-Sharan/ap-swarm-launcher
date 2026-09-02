@@ -1,0 +1,12 @@
+{
+  "id": "session-1788259732320",
+  "startedAt": "2026-09-01T10:48:52.320Z",
+  "cwd": "/home/casr/Documents/sim_vehicle/ap-swarm-launcher",
+  "context": {},
+  "metrics": {
+    "edits": 0,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  }
+}
