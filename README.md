@@ -22,6 +22,30 @@ these steps:
 
 Tested on Linux and macOS. May or may not work on Windows.
 
+## Mixing vehicle types
+
+By default, all drones in the swarm run the same SITL executable and vehicle
+model, taken from the positional `SITL_EXECUTABLE` argument plus `-m/--model`
+and `-n/--num-drones`.
+
+To mix vehicle types (e.g. run some ArduPlane/QuadPlane drones alongside some
+ArduCopter drones in the same simulation), use one or more `--vehicle`
+options instead, each in the form `EXECUTABLE[:MODEL[:COUNT]]`:
+
+```sh
+uv run ap-sitl-swarm \
+  --vehicle ../ardupilot/build/sitl/bin/arduplane:quadplane:3 \
+  --vehicle ../ardupilot/build/sitl/bin/arducopter:quad:3 \
+  --num-drones-per-row 3 --home 12.928852,80.046431
+```
+
+`MODEL` and `COUNT` are optional and default to the executable's own default
+model and a count of 1, respectively. `--vehicle` can be combined with the
+positional `SITL_EXECUTABLE` argument, which is then treated as one more
+group. All groups share the same takeoff grid, home location, and system ID
+sequence; each drone's SITL defaults (e.g. the embedded QuadPlane tuning
+parameters) are chosen automatically based on its own executable.
+
 ## License
 
 Copyright 2022-2024 CollMot Robotics Ltd.

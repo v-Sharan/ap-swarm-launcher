@@ -2,6 +2,7 @@
 
 import sys
 from argparse import ArgumentParser
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from random import normalvariate
@@ -28,6 +29,60 @@ def parse_parameter(value: str) -> Union[Path, Tuple[str, float]]:
         if not path.is_file():
             raise RuntimeError(f"Param file does not exist: {name!r}")
         return path
+
+
+@dataclass
+class VehicleGroup:
+    """A group of identical simulated drones that share the same SITL
+    executable and vehicle model within a (possibly mixed) swarm.
+    """
+
+    executable: Path
+    model: Optional[str] = None
+    count: int = 1
+
+
+def parse_vehicle_spec(value: str) -> VehicleGroup:
+    """Parses a ``--vehicle`` command-line argument of the form
+    ``EXECUTABLE[:MODEL[:COUNT]]`` into a `VehicleGroup`.
+
+    MODEL defaults to the SITL executable's own default model (e.g. 'quad'
+    for ArduCopter) when omitted, and COUNT defaults to 1 when omitted. This
+    allows mixing different vehicle types (e.g. ArduCopter and ArduPlane /
+    QuadPlane) in the same swarm by supplying `--vehicle` multiple times.
+    """
+    parts = value.split(":")
+    if len(parts) == 1:
+        executable_str, model_str, count_str = parts[0], "", "1"
+    elif len(parts) == 2:
+        executable_str, model_str = parts
+        count_str = "1"
+    elif len(parts) == 3:
+        executable_str, model_str, count_str = parts
+    else:
+        raise RuntimeError(
+            f"invalid --vehicle spec: {value!r}; expected "
+            "EXECUTABLE[:MODEL[:COUNT]]"
+        )
+
+    executable_str = executable_str.strip()
+    path = Path(executable_str)
+    if not path.is_file():
+        raise RuntimeError(f"SITL executable does not exist: {executable_str!r}")
+
+    model = model_str.strip() or None
+
+    count_str = count_str.strip() or "1"
+    try:
+        count = int(count_str)
+    except ValueError:
+        raise RuntimeError(
+            f"invalid drone count in --vehicle spec: {count_str!r}"
+        ) from None
+    if count <= 0:
+        raise RuntimeError(f"drone count in --vehicle spec must be positive: {count}")
+
+    return VehicleGroup(executable=path, model=model, count=count)
 
 
 def create_parser() -> ArgumentParser:
@@ -97,6 +152,22 @@ def create_parser() -> ArgumentParser:
         metavar="COUNT",
     )
     parser.add_argument(
+        "--vehicle",
+        dest="vehicles",
+        action="append",
+        default=[],
+        type=parse_vehicle_spec,
+        metavar="EXECUTABLE[:MODEL[:COUNT]]",
+        help=(
+            "add a group of COUNT drones running the given SITL EXECUTABLE "
+            "with the given vehicle MODEL to the swarm. May be given "
+            "multiple times to mix vehicle types (e.g. ArduCopter and "
+            "ArduPlane/QuadPlane) in the same simulation. Combines with the "
+            "positional SITL_EXECUTABLE argument (if given), which is then "
+            "treated as an additional group."
+        ),
+    )
+    parser.add_argument(
         "--num-drones-per-row",
         default=None,
         type=int,
@@ -150,14 +221,22 @@ def create_parser() -> ArgumentParser:
 
     parser.add_argument(
         "sitl_executable",
+        nargs="?",
+        default=None,
         metavar="SITL_EXECUTABLE",
-        help="path to the ArduPilot SITL executable to use",
+        help=(
+            "path to the ArduPilot SITL executable to use for the whole "
+            "swarm (or for one group of drones, if --vehicle is also "
+            "given). May be omitted in favor of one or more --vehicle "
+            "options to mix vehicle types."
+        ),
     )
     return parser
 
 
 async def run(
-    sitl_executable: Path,
+    sitl_executable: Optional[Path] = None,
+    vehicles: Sequence[VehicleGroup] = (),
     data_dir: Optional[Path] = None,
     home: LocationDefinition = DEFAULT_LOCATION,
     num_drones: int = 1,
@@ -176,37 +255,54 @@ async def run(
     gcs_port = DEFAULT_GCS_PORT
     listener_port = DEFAULT_LISTENER_PORT
 
-    gcs_address = f"127.0.0.1:{gcs_port}" if use_udp else None
+    gcs_address = f"192.168.31.15:{gcs_port}" if use_udp else None
     multicast_address = f"239.255.67.77:{listener_port}" if use_multicast else None
-    sitl_executable = Path.cwd() / sitl_executable
+
+    # Build the list of vehicle groups: the positional SITL_EXECUTABLE (if
+    # given) forms one group using -m/--model and -n/--num-drones, and each
+    # --vehicle option adds another. This is what allows mixing vehicle
+    # types (e.g. ArduCopter + ArduPlane/QuadPlane) in a single swarm.
+    groups: List[VehicleGroup] = []
+    if sitl_executable is not None:
+        groups.append(
+            VehicleGroup(
+                executable=Path.cwd() / sitl_executable,
+                model=model,
+                count=num_drones,
+            )
+        )
+    for group in vehicles:
+        groups.append(
+            VehicleGroup(
+                executable=Path.cwd() / group.executable,
+                model=group.model,
+                count=group.count,
+            )
+        )
+
+    if not groups:
+        raise RuntimeError(
+            "no SITL executable specified; provide SITL_EXECUTABLE or at "
+            "least one --vehicle option"
+        )
+
+    total_drones = sum(group.count for group in groups)
 
     if num_drones_per_row is None:
-        num_drones_per_row = max(1, int(round(num_drones**0.5)))
+        num_drones_per_row = max(1, int(round(total_drones**0.5)))
 
     grid = create_grid_formation(num_drones_per_row, spacing, pos_noise)
 
-    param_sources: List[Union[Path, str, Tuple[str, float]]] = [
-        # "embedded://plane.parm",
-        "embedded://quadplane.parm",
-    ]
-    param_sources.extend(param)
+    # Per-drone embedded default parameter files (e.g. quadplane.parm) are
+    # now selected in sitl.py based on each drone's own executable, so only
+    # the user-supplied --param overrides are passed through here.
+    param_sources: List[Union[Path, str, Tuple[str, float]]] = list(param)
 
-    port = {
-        1: 14551,
-        2: 14552,
-        3: 14553,
-        4: 14554,
-        5: 14555,
-        6: 14556,
-        7: 14557,
-        8: 14558,
-        9: 14559,
-        10: 14560,
-    }
+    port = {i: DEFAULT_GCS_PORT + i for i in range(1, total_drones + 1)}
     ip = NetworkIP.get_ip()
 
     async with SimulatedDroneSwarm(
-        sitl_executable,
+        groups[0].executable,
         dir=data_dir,
         params=param_sources,
         coordinate_system=home.coordinate_system,
@@ -215,16 +311,21 @@ async def run(
         multicast_address=multicast_address,
         tcp_base_port=tcp_base_port,
         serial_port=serial_port,
-        model=model,
+        model=groups[0].model,
         start_system_id=1 + system_id_offset,
     ).use() as swarm:
-        for i in range(num_drones):
-            await swarm.add_drone(
-                swarm_output="127.0.0.1:{}".format(port[i + 1]),
-                gcs_out="{}:{}".format(ip, port[i + 1]),
-                home=grid(i),
-                heading=(home.orientation + normalvariate(0, yaw_noise)) % 360,
-            )
+        i = 0
+        for group in groups:
+            for _ in range(group.count):
+                await swarm.add_drone(
+                    swarm_output="192.168.31.15:{}".format(port[i + 1]),
+                    gcs_out="{}:{}".format(ip, port[i + 1]),
+                    home=grid(i),
+                    heading=(home.orientation + normalvariate(0, yaw_noise)) % 360,
+                    executable=group.executable,
+                    model=group.model,
+                )
+                i += 1
 
         # We need to re-route broadcast traffic sent to the port of the
         # multicast address because Skybrush will send broadcast traffic

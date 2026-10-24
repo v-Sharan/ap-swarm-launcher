@@ -238,14 +238,36 @@ async def start_simulator(
     return process
 
 
+def _default_embedded_param_file(executable: Union[str, Path]) -> Optional[str]:
+    """Picks the name of the embedded parameter file (see
+    `use_embedded_param_file()`) with tuned defaults that matches the given
+    SITL executable, based on its filename.
+
+    Returns ``None`` if there is no embedded default parameter file for this
+    vehicle type, in which case only ArduPilot's own built-in SITL defaults
+    apply, plus whatever the caller passed in `SimulatedDroneSwarm`'s
+    ``params`` (e.g. via ``--param``).
+    """
+    name = Path(executable).name.lower()
+    if "copter" in name:
+        return "copter.parm"
+    if "plane" in name:
+        return "quadplane.parm"
+    return None
+
+
 class SimulatedDroneSwarm:
     """Object that is responsible for managing a simulated drone swarm by
     spawing the appropriate ArduPilot SITL processes for each simulated
     drone.
     """
 
-    _executable: Path
-    """Full path to the ArduPilot SITL executable."""
+    _executable: Optional[Path]
+    """Full path to the default ArduPilot SITL executable used for drones
+    that don't specify their own executable in `add_drone()`. May be
+    ``None`` if every drone added to the swarm supplies its own executable
+    (e.g. to mix ArduCopter and ArduPlane/QuadPlane in the same swarm).
+    """
 
     _gcs_address: Optional[str] = None
 
@@ -264,7 +286,7 @@ class SimulatedDroneSwarm:
 
     def __init__(
         self,
-        executable: Path,
+        executable: Optional[Path] = None,
         dir: Optional[Path] = None,
         params: Optional[Sequence[Union[str, Path, Tuple[str, float]]]] = None,
         coordinate_system: Optional[FlatEarthToGPSCoordinateTransformation] = None,
@@ -280,7 +302,10 @@ class SimulatedDroneSwarm:
         """Constructor.
 
         Parameters:
-            executable: full path to the ArduPilot SITL executable
+            executable: full path to the default ArduPilot SITL executable
+                to use for drones added via `add_drone()` that don't specify
+                their own `executable`. May be omitted if every drone added
+                to the swarm specifies its own executable.
             dir: the configuration directory of the swarm. When omitted, a
                 temporary directory will be created for the content related
                 to the swarm.
@@ -307,7 +332,7 @@ class SimulatedDroneSwarm:
             start_system_id: the system ID of the first simulated drone; each
                 subsequent drone will get a system ID incremented by 1
         """
-        self._executable = Path(executable)
+        self._executable = Path(executable) if executable else None
         self._dir = Path(dir) if dir else None
         self._params = list(params) if params else []
         self._serial_port = serial_port
@@ -396,6 +421,8 @@ class SimulatedDroneSwarm:
         heading: Optional[float] = None,
         swarm_output: str = "",
         gcs_out: str = "",
+        executable: Optional[Union[str, Path]] = None,
+        model: Optional[str] = None,
     ) -> ManagedAsyncProcess:
         """Starts the simulator process for a single drone with the given
         parameters.
@@ -404,9 +431,24 @@ class SimulatedDroneSwarm:
             home: the home position of the drone, in flat Earth coordinates
             heading: the initial heading of the drone; `None` means to use the
                 swarm-specific default
+            executable: full path to the SITL executable to use for this
+                particular drone; falls back to the swarm-wide default
+                executable when omitted. This is what allows mixing vehicle
+                types (e.g. ArduCopter and ArduPlane/QuadPlane) in the same
+                swarm.
+            model: vehicle model to use for this particular drone; falls
+                back to the swarm-wide default model when omitted
         """
         assert self._runner is not None
         assert self._swarm_dir is not None
+
+        executable = Path(executable) if executable else self._executable
+        if executable is None:
+            raise RuntimeError(
+                "no SITL executable specified for this drone, and the swarm "
+                "has no default executable either"
+            )
+        model = model if model is not None else self._model
 
         geodetic_home = self._coordinate_system.to_gps((home[0], home[1], 0))
         heading = float(heading) if heading is not None else self._default_heading
@@ -430,8 +472,14 @@ class SimulatedDroneSwarm:
 
         await AsyncPath(drone_dir).mkdir(parents=True, exist_ok=True)  # type: ignore
 
+        default_param_file = _default_embedded_param_file(executable)
+        param_sources: List[Union[str, Path, Tuple[str, float]]] = (
+            [f"embedded://{default_param_file}"] if default_param_file else []
+        )
+        param_sources.extend(self._params)
+
         async with await open_file(own_param_file, "wb+") as fp:
-            for param_source in self._params:
+            for param_source in param_sources:
                 if isinstance(param_source, str):
                     if param_source.startswith("embedded://"):
                         param_source = use_embedded_param_file(
@@ -479,14 +527,14 @@ class SimulatedDroneSwarm:
         await AsyncPath(drone_fs_dir).mkdir(parents=True, exist_ok=True)  # type: ignore
 
         process = await start_simulator(
-            self._executable,
+            executable,
             runner=self._runner,
             name=str(index),
             param_file=own_param_file,
             home=geodetic_home,
             heading=heading,
             index=index - 1,
-            model=self._model,
+            model=model,
             cwd=drone_fs_dir,
             uarts={
                 # Serial port 0 is for direct access via TCP. This corresponds to
@@ -544,6 +592,8 @@ class SimulatedDroneSwarmContext:
         heading: Optional[float] = None,
         swarm_output: str = "",
         gcs_out: str = "",
+        executable: Optional[Union[str, Path]] = None,
+        model: Optional[str] = None,
     ) -> ManagedAsyncProcess:
         """Adds a new drone to the swarm and starts the corresponding simulator
         process.
@@ -552,9 +602,21 @@ class SimulatedDroneSwarmContext:
             home: the home position of the drone, in flat Earth coordinates
             heading: the initial heading of the drone; `None` means to use the
                 swarm-specific default
+            executable: full path to the SITL executable to use for this
+                drone; `None` means to use the swarm-wide default executable.
+                Passing a different executable per drone (e.g. arducopter vs
+                arduplane) is what allows mixing vehicle types in the same
+                swarm.
+            model: vehicle model to use for this drone; `None` means to use
+                the swarm-wide default model
         """
         return await self._swarm._start_simulated_drone(
-            home=home, heading=heading, swarm_output=swarm_output, gcs_out=gcs_out
+            home=home,
+            heading=heading,
+            swarm_output=swarm_output,
+            gcs_out=gcs_out,
+            executable=executable,
+            model=model,
         )
 
     def request_stop(self):
