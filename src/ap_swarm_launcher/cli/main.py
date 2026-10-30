@@ -255,7 +255,7 @@ async def run(
     gcs_port = DEFAULT_GCS_PORT
     listener_port = DEFAULT_LISTENER_PORT
 
-    gcs_address = f"192.168.31.15:{gcs_port}" if use_udp else None
+    gcs_address = f"172.24.96.1:{gcs_port}" if use_udp else None
     multicast_address = f"239.255.67.77:{listener_port}" if use_multicast else None
 
     # Build the list of vehicle groups: the positional SITL_EXECUTABLE (if
@@ -318,7 +318,7 @@ async def run(
         for group in groups:
             for _ in range(group.count):
                 await swarm.add_drone(
-                    swarm_output="192.168.31.15:{}".format(port[i + 1]),
+                    swarm_output="192.168.2.188:{}".format(port[i + 1]),
                     gcs_out="{}:{}".format(ip, port[i + 1]),
                     home=grid(i),
                     heading=(home.orientation + normalvariate(0, yaw_noise)) % 360,
@@ -327,9 +327,6 @@ async def run(
                 )
                 i += 1
 
-        # We need to re-route broadcast traffic sent to the port of the
-        # multicast address because Skybrush will send broadcast traffic
-        # to 127.0.0.1
         await route_local_broadcast_traffic_to_multicast(multicast_address)
 
 
