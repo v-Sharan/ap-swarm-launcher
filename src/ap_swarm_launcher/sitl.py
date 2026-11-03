@@ -152,8 +152,6 @@ def create_args_for_simulator(
     # as of ArduCopter 4.2.1 that crashes the SITL on macOS if the speedup is
     # not set explicitly
     result.extend(["--speedup", str(speedup)])
-    print(f"Starting SITL with args: {result}")
-
     return result
 
 

@@ -103,6 +103,13 @@ def create_parser() -> ArgumentParser:
         help="aggregate all packets from the drones to the given serial PORT",
     )
     parser.add_argument(
+        "--ip",
+        default="0.0.0.0",
+        type=str,
+        metavar="IP Address",
+        help="Ip address to send the data",
+    )
+    parser.add_argument(
         "--no-udp",
         dest="use_udp",
         default=True,
@@ -251,11 +258,12 @@ async def run(
     use_multicast: bool = True,
     model: Optional[str] = None,
     system_id_offset: int = 0,
+    ip:str="0.0.0.0"
 ) -> None:
     gcs_port = DEFAULT_GCS_PORT
     listener_port = DEFAULT_LISTENER_PORT
 
-    gcs_address = f"172.24.96.1:{gcs_port}" if use_udp else None
+    gcs_address = f"{ip}:{gcs_port}" if use_udp else None
     multicast_address = f"239.255.67.77:{listener_port}" if use_multicast else None
 
     # Build the list of vehicle groups: the positional SITL_EXECUTABLE (if
@@ -299,7 +307,8 @@ async def run(
     param_sources: List[Union[Path, str, Tuple[str, float]]] = list(param)
 
     port = {i: DEFAULT_GCS_PORT + i for i in range(1, total_drones + 1)}
-    ip = NetworkIP.get_ip()
+    # ip = NetworkIP.get_ip()
+    print(ip)
 
     async with SimulatedDroneSwarm(
         groups[0].executable,
@@ -318,8 +327,8 @@ async def run(
         for group in groups:
             for _ in range(group.count):
                 await swarm.add_drone(
-                    swarm_output="192.168.2.188:{}".format(port[i + 1]),
-                    gcs_out="{}:{}".format(ip, port[i + 1]),
+                    swarm_output=f"{ip}:{port[i + 1]}",
+                    gcs_out=f"{ip}:{port[i + 1]}",
                     home=grid(i),
                     heading=(home.orientation + normalvariate(0, yaw_noise)) % 360,
                     executable=group.executable,
