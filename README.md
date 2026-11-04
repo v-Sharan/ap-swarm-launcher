@@ -20,7 +20,7 @@ these steps:
    with a pre-compiled SITL executable at `${SITL_PATH}`. Use the `-h` switch
    for more options.
 
-Tested on Linux and macOS. May or may not work on Windows.
+Tested on Linux and macOS. For Windows, see [WINDOWS.md](WINDOWS.md).
 
 ## Mixing vehicle types
 
