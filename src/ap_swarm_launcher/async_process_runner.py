@@ -404,7 +404,10 @@ class _AsyncProcessRunner:
         code = await process.wait()
 
         if code < 0:
-            signal = Signals(-code).name
+            try:
+                signal = Signals(-code).name
+            except ValueError:
+                signal = str(-code)
             write(
                 f"Subprocess exited with signal {signal}",
                 meta=True,

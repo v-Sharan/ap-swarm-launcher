@@ -9,7 +9,7 @@ dependencies = [
     "trio>=0.21.0",
     "pyserial>=3.5",
     "exceptiongroup>=1.2.2",
-    "netifaces>=0.11.0",
+    "netifaces>=0.11.0; sys_platform != 'win32'",
 ]
 
 [project.scripts]

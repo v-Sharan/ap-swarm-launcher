@@ -1,4 +1,3 @@
-import netifaces
 import platform
 import subprocess
 import json
@@ -116,6 +115,10 @@ class NetworkIP:
 
     @classmethod
     def _get_linux_ip(cls, keywords):
+
+        # Imported lazily: netifaces is a Linux-only dependency (it has no
+        # prebuilt wheels for current Python versions on Windows)
+        import netifaces
 
         for interface in netifaces.interfaces():
 
