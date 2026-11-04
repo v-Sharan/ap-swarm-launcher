@@ -51,7 +51,14 @@ def parse_vehicle_spec(value: str) -> VehicleGroup:
     allows mixing different vehicle types (e.g. ArduCopter and ArduPlane /
     QuadPlane) in the same swarm by supplying `--vehicle` multiple times.
     """
+    # Keep a Windows drive prefix (e.g. "C:\" or "C:/") out of the split so
+    # that the colon after the drive letter is not taken as a separator
+    drive = ""
+    if len(value) >= 3 and value[0].isalpha() and value[1] == ":" and value[2] in "\\/":
+        drive, value = value[:2], value[2:]
+
     parts = value.split(":")
+    parts[0] = drive + parts[0]
     if len(parts) == 1:
         executable_str, model_str, count_str = parts[0], "", "1"
     elif len(parts) == 2:
