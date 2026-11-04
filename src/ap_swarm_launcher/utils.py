@@ -1,5 +1,6 @@
 from contextlib import AbstractContextManager, AsyncExitStack, ExitStack, contextmanager
 from os import chdir
+from sys import version_info
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Iterator, Optional, Union
@@ -87,6 +88,10 @@ async def route_local_broadcast_traffic_to_multicast(
 
 def temporary_directory(**kwds) -> AbstractContextManager:
     """Returns a context manager that creates a temporary directory."""
+    if version_info >= (3, 10):
+        # On Windows, files that a just-terminated SITL process still holds
+        # open cannot be deleted; don't fail the shutdown because of that
+        kwds.setdefault("ignore_cleanup_errors", True)
     return TemporaryDirectory(prefix="sitl-swarm-", **kwds)
 
 

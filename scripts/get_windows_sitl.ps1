@@ -22,6 +22,9 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"  # Invoke-WebRequest is very slow with the progress bar
 
+# Windows PowerShell 5.1 may default to TLS 1.0/1.1, which the firmware server rejects
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
 $baseUrl = "https://firmware.ardupilot.org/Tools/MissionPlanner/sitl"
 $dlls = @(
     "cygatomic-1.dll",
@@ -56,15 +59,15 @@ foreach ($vehicle in $Vehicles) {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
     Write-Host "Downloading $vehicle ($Channel) into $dir"
-    Invoke-WebRequest -Uri "$url/$vehicle.elf" -OutFile (Join-Path $dir "$vehicle.exe")
+    Invoke-WebRequest -UseBasicParsing -Uri "$url/$vehicle.elf" -OutFile (Join-Path $dir "$vehicle.exe")
 
     foreach ($dll in $dlls) {
         $name = [System.Uri]::UnescapeDataString($dll)
-        Invoke-WebRequest -Uri "$url/$dll" -OutFile (Join-Path $dir $name)
+        Invoke-WebRequest -UseBasicParsing -Uri "$url/$dll" -OutFile (Join-Path $dir $name)
     }
 
     try {
-        Invoke-WebRequest -Uri "$url/git.txt" -OutFile (Join-Path $dir "git.txt")
+        Invoke-WebRequest -UseBasicParsing -Uri "$url/git.txt" -OutFile (Join-Path $dir "git.txt")
     } catch {
         # git.txt is informational only
     }
