@@ -15,6 +15,9 @@ dependencies = [
 [project.scripts]
 ap-sitl-swarm = "ap_swarm_launcher.cli.__main__:main"
 
+[project.gui-scripts]
+ap-sitl-swarm-gui = "ap_swarm_launcher.gui:main"
+
 [tool.ruff]
 lint.ignore = ["B905", "C901", "E402", "E501"]
 lint.select = ["B", "C", "E", "F", "W"]

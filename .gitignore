@@ -16,3 +16,7 @@ test-swarm/
 
 # Generated code
 src/flockwave/protocols/mavlink/dialects
+
+# Swarm launcher GUI: drone data and downloaded Windows SITL binaries
+swarm-data/
+bin/windows/

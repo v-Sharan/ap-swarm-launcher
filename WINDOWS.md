@@ -66,7 +66,38 @@ Close and reopen the terminal afterwards so that `uv` is on the `PATH`.
 
    Re-run the script whenever you want to update the simulators.
 
-## Running
+## Running from the GUI
+
+```powershell
+uv run ap-sitl-swarm-gui
+```
+
+To start it from anywhere without a terminal, create Desktop and Start menu
+shortcuts ("AP SITL Swarm Launcher") once:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\create_gui_shortcut.ps1
+```
+
+In the window, set:
+
+| Field | Meaning |
+|---|---|
+| **Vehicles: Count** | Number of QuadPlanes and Copters. Set one of them to 0 to simulate only Copters or only QuadPlanes. The window shows which system IDs each type gets: QuadPlanes first, then Copters. |
+| **Drones per row** | Width of the takeoff grid (3 m spacing). Drones fill the grid row by row in system-ID order. |
+| **Home location** | Latitude, longitude, altitude AMSL and heading of the formation |
+| **Ground station IP** | Where telemetry is sent over UDP (`IP:14550` for all drones, `IP:14550+N` for drone N). Use `127.0.0.1` for Mission Planner on the same laptop, or another computer's IP. |
+
+Click **Start simulation**. The simulator output appears in the log, and
+**Stop** shuts the whole swarm down. The window remembers your last settings.
+
+Each QuadPlane loads `quadplane.parm` and each Copter loads `copter.parm`
+from `src\ap_swarm_launcher\resources\`, on top of ArduPilot's built-in
+defaults. The drones' working files (EEPROM, logs, generated
+`default.param`) live in `swarm-data\`, which is wiped at every start, so
+each run begins from those defaults.
+
+## Running from the command line
 
 Mixed swarm of 5 QuadPlanes and 5 quadcopters (same as `run_mixed.sh` on
 Linux):
